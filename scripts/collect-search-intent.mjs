@@ -10,12 +10,23 @@ const terms = [
   { id: "llp-registration-bangalore", label: "LLP Registration Bangalore", keyword: "llp registration bangalore" }
 ];
 
+const loops = Math.max(1, Number(process.env.COLLECT_LOOPS || "1"));
+const intervalSeconds = Math.max(60, Number(process.env.COLLECT_INTERVAL_SECONDS || "60"));
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseTrendResponse(raw) {
   const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
   const timeline = parsed?.default?.timelineData || [];
+
   return timeline.map((row) => {
     const value = Array.isArray(row.value) ? row.value[0] : row.value;
-    return { time: Number(row.time) * 1000, value: Number(value) || 0 };
+    return {
+      time: Number(row.time) * 1000,
+      value: Number(value) || 0
+    };
   });
 }
 
@@ -41,7 +52,9 @@ async function collectTerm(term) {
 
   const current = points.at(-1)?.value || 0;
   const previous = points.at(-2)?.value || 0;
-  const delta = previous === 0 ? (current === 0 ? 0 : 100) : Math.round(((current - previous) / previous) * 100);
+  const delta = previous === 0
+    ? (current === 0 ? 0 : 100)
+    : Math.round(((current - previous) / previous) * 100);
 
   return {
     ...term,
@@ -51,21 +64,13 @@ async function collectTerm(term) {
   };
 }
 
-async function main() {
-  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!redisUrl || !redisToken) {
-    throw new Error("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN");
-  }
-
-  const redis = Redis.fromEnv();
+async function collectSnapshot(redis) {
   const results = [];
 
   for (const term of terms) {
     try {
       results.push(await collectTerm(term));
-      console.log(`Collected: ${term.keyword}`);
+      console.log("Collected:", term.keyword);
     } catch (error) {
       results.push({
         ...term,
@@ -74,7 +79,7 @@ async function main() {
         sampledPoints: 0,
         error: error instanceof Error ? error.message : "Trend provider error"
       });
-      console.error(`Failed: ${term.keyword}`, error);
+      console.error("Failed:", term.keyword, error);
     }
   }
 
@@ -88,7 +93,32 @@ async function main() {
   await redis.lpush("search-intent-monitor:history", JSON.stringify(snapshot));
   await redis.ltrim("search-intent-monitor:history", 0, 287);
 
-  console.log(JSON.stringify(snapshot, null, 2));
+  console.log("Snapshot saved at", snapshot.generatedAt);
+}
+
+async function main() {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (!redisUrl || !redisToken) {
+    throw new Error("Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN");
+  }
+
+  const redis = Redis.fromEnv();
+
+  for (let i = 0; i < loops; i += 1) {
+    const iterationStarted = Date.now();
+    console.log("Collection", i + 1, "of", loops);
+
+    await collectSnapshot(redis);
+
+    if (i < loops - 1) {
+      const elapsed = Date.now() - iterationStarted;
+      const remaining = Math.max(0, intervalSeconds * 1000 - elapsed);
+      console.log("Waiting", Math.ceil(remaining / 1000), "seconds until next collection");
+      await sleep(remaining);
+    }
+  }
 }
 
 main().catch((error) => {
