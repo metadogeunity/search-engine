@@ -11,27 +11,21 @@ permissions:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Trigger Vercel collector
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Collect search intent
         env:
-          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "${VERCEL_APP_URL:-}" ]; then
-            echo "Missing GitHub Actions secret: VERCEL_APP_URL"
-            exit 1
-          fi
-
-          if [ -z "${CRON_SECRET:-}" ]; then
-            echo "Missing GitHub Actions secret: CRON_SECRET"
-            exit 1
-          fi
-
-          URL="${VERCEL_APP_URL%/}/api/cron/collect"
-
-          response=$(curl --fail-with-body --silent --show-error             --max-time 120             --retry 2             --retry-delay 3             -H "Authorization: Bearer ${CRON_SECRET}"             "${URL}")
-
-          echo "${response}"
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: node scripts/collect-search-intent.mjs
