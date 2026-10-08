@@ -66,11 +66,18 @@ export default function Home() {
     <main className="page">
       <div className="shell">
         <header className="header">
-          <div>
+          <div className="brand-block">
+            <img
+              className="brand-logo"
+              src="/btax-advisors-logo.png"
+              alt="BTAX Advisors"
+              width="184"
+              height="72"
+            />
             <div className="eyebrow">24/7 Search Intent Monitor</div>
             <h1>GST + Company Registration</h1>
             <p className="subtitle">
-              India-wide aggregated Google search-interest monitoring. The agent refreshes automatically and keeps the last collection history when a Redis store is connected.
+              India-wide aggregated Google search-interest monitoring. The collector refreshes automatically and keeps the latest persisted sample.
             </p>
           </div>
 
@@ -140,7 +147,7 @@ export default function Home() {
 
         <footer className="footer">
           <div>
-            Source: Google Trends interest-over-time signal for India. Refresh cadence: 10 minutes through Vercel Cron; browser refresh: 60 seconds.
+            Source: Google Trends interest-over-time signal for India. Collector cadence: approximately 1 minute; browser refresh: 60 seconds.
           </div>
           <div>
             {loading ? "Loading…" : error ? <span className="error">{error}</span> : "Ready"}
