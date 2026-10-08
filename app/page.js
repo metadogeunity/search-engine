@@ -67,13 +67,9 @@ export default function Home() {
       <div className="shell">
         <header className="header">
           <div className="brand-block">
-            <img
-              className="brand-logo"
-              src="/btax-advisors-logo.png"
-              alt="BTAX Advisors"
-              width="184"
-              height="72"
-            />
+            <div className="brand-name">B Tax Advisors India Pvt Ltd</div>
+            <div className="brand-location">bangalore India</div>
+            <div className="brand-credit">Made for Ashwat CA from Ashish Janghel</div>
             <div className="eyebrow">24/7 Search Intent Monitor</div>
             <h1>GST + Company Registration</h1>
             <p className="subtitle">
