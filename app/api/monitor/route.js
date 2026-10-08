@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { TERMS } from "@/lib/config";
-import { collectAll } from "@/lib/trends";
 import { getLatestSnapshot } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -8,17 +6,29 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const stored = await getLatestSnapshot();
-  const fresh = await collectAll(TERMS);
-  const snapshot = {
-    generatedAt: new Date().toISOString(),
-    source: "google-trends",
-    terms: fresh
-  };
+
+  if (!stored) {
+    return NextResponse.json({
+      generatedAt: null,
+      source: "waiting-for-collector",
+      terms: [],
+      historyAvailable: Boolean(
+        process.env.UPSTASH_REDIS_REST_URL &&
+        process.env.UPSTASH_REDIS_REST_TOKEN
+      ),
+      message: "Waiting for the first scheduled collection."
+    }, {
+      headers: { "Cache-Control": "no-store" }
+    });
+  }
 
   return NextResponse.json({
-    ...snapshot,
-    historyAvailable: Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
-    lastPersistedAt: stored?.generatedAt || null
+    ...stored,
+    historyAvailable: Boolean(
+      process.env.UPSTASH_REDIS_REST_URL &&
+      process.env.UPSTASH_REDIS_REST_TOKEN
+    ),
+    lastPersistedAt: stored.generatedAt
   }, {
     headers: { "Cache-Control": "no-store" }
   });
