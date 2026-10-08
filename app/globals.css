@@ -25,6 +25,18 @@ body {
 .page { min-height: 100vh; padding: 32px; }
 .shell { width: min(1200px, 100%); margin: 0 auto; }
 
+.brand-block {
+  min-width: 0;
+}
+
+.brand-logo {
+  display: block;
+  width: 138px;
+  height: auto;
+  margin-bottom: 16px;
+  border-radius: 10px;
+}
+
 .header {
   display: flex;
   align-items: flex-end;
@@ -217,10 +229,86 @@ h1 {
 }
 
 @media (max-width: 640px) {
-  .page { padding: 18px; }
-  .header { align-items: stretch; flex-direction: column; }
-  .status { min-width: 0; }
-  .table-head { display: none; }
-  .table-row { grid-template-columns: 1fr; gap: 8px; }
-  .footer { flex-direction: column; }
+  .page {
+    padding: 14px;
+  }
+
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+    margin-bottom: 18px;
+  }
+
+  .brand-logo {
+    width: 122px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: clamp(30px, 10vw, 42px);
+    line-height: 1.02;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .status {
+    min-width: 0;
+  }
+
+  .card {
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .hero {
+    padding: 18px 16px;
+  }
+
+  .big-number {
+    font-size: 54px;
+  }
+
+  .table-head {
+    display: none;
+  }
+
+  .table-card {
+    border-radius: 16px;
+  }
+
+  .table-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 16px;
+  }
+
+  .table-row > div {
+    min-width: 0;
+  }
+
+  .footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 380px) {
+  .page {
+    padding: 10px;
+  }
+
+  .brand-logo {
+    width: 112px;
+  }
+
+  .big-number {
+    font-size: 48px;
+  }
+
+  .stat-row {
+    padding: 11px 0;
+  }
 }
