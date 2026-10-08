@@ -1,6 +1,6 @@
 # Search Intent Monitor
 
-Vercel/Next.js service for monitoring aggregated search interest around GST and company-registration demand in India.
+Vercel/Next.js dashboard for monitoring aggregated Google search interest around GST and company-registration demand in India.
 
 ## Signals
 
@@ -15,74 +15,67 @@ Vercel/Next.js service for monitoring aggregated search interest around GST and 
 
 Google Trends data is anonymised, normalised and aggregated. It does not expose a live count of individual people searching and this application does not identify searchers.
 
-The dashboard therefore reports a relative 0–100 search-interest index. Optional Google Ads Keyword Planner baseline volumes can be configured to produce a directional daily estimate.
+The dashboard therefore reports a relative 0–100 search-interest index.
 
 ## Deployment architecture
 
-- **Vercel Hobby** hosts the Next.js dashboard and API.
+- **Vercel Hobby** hosts the Next.js dashboard.
 - **Upstash Redis** stores the latest sample and rolling history.
-- **GitHub Actions** triggers `/api/cron/collect` every 10 minutes.
-- The browser reads the latest Redis snapshot instead of calling Google Trends on every refresh.
+- **GitHub Actions** runs the collector every 10 minutes and writes directly to Upstash.
+- The dashboard reads the latest Redis snapshot.
 
-Vercel Cron is intentionally not used, so the project does not depend on Vercel's paid Cron scheduling.
+There is no Vercel Cron dependency and no public collector endpoint.
 
 ## Vercel environment variables
 
 Set these in Vercel:
 
-- `CRON_SECRET`
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
+`CRON_SECRET` is no longer required by the application.
+
 ## GitHub Actions secrets
 
-In the GitHub repository, open:
+In:
 
-**Settings → Secrets and variables → Actions → New repository secret**
+**Settings → Secrets and variables → Actions → Repository secrets**
 
-Add:
+add:
 
-- `VERCEL_APP_URL` — your deployed Vercel URL, for example `https://search-engine.example.vercel.app`
-- `CRON_SECRET` — exactly the same value used in Vercel.
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-The workflow file is:
+Use the exact same values you have in Vercel.
+
+The workflow is:
 
 `.github/workflows/collect-search-intent.yml`
 
-It runs every 10 minutes and can also be started manually from the GitHub Actions tab.
+It runs every 10 minutes and can also be started manually.
 
-## First deployment
+## First test
 
 1. Deploy the repository to Vercel.
-2. Add the three Vercel environment variables.
-3. Complete the Vercel deployment.
-4. Copy the live Vercel URL.
-5. Add `VERCEL_APP_URL` and the same `CRON_SECRET` as GitHub Actions secrets.
-6. Open **GitHub → Actions → Collect Search Intent → Run workflow** once to test immediately.
-
-## Local development
-
-```bash
-npm install
-npm run dev
-```
-
-Then open http://localhost:3000.
+2. Confirm the two Upstash variables are present in the Vercel Production environment.
+3. Add those same two values as GitHub Actions repository secrets.
+4. Open **GitHub → Actions → Collect Search Intent → Run workflow**.
+5. Wait for the job to finish.
+6. Open the Vercel dashboard and refresh.
 
 ## Architecture
 
 - `app/page.js` — dashboard
 - `app/api/monitor/route.js` — latest persisted dashboard data
-- `app/api/cron/collect/route.js` — scheduled collector endpoint
-- `lib/trends.js` — Google Trends adapter and scoring
 - `lib/store.js` — Upstash persistence
 - `lib/config.js` — monitored terms
+- `scripts/collect-search-intent.mjs` — direct collector
 - `.github/workflows/collect-search-intent.yml` — 10-minute scheduler
 
 ## Scheduler note
 
-GitHub scheduled workflows may be delayed during periods of high Actions load. The workflow is a periodic collector, not a guaranteed exact-to-the-second timer.
+GitHub scheduled workflows may be delayed during periods of high Actions load. This is a periodic collector, not an exact-to-the-second timer.
 
 ## Data adapter note
 
-`google-trends-api` is a community adapter rather than an official Google Trends API. It may require maintenance if Google changes its internal endpoints. For a long-lived commercial deployment, replace `lib/trends.js` with an approved data provider while preserving the dashboard/storage interfaces.
+`google-trends-api` is a community adapter rather than an official Google Trends API. It may require maintenance if Google changes its internal endpoints. For a long-lived commercial deployment, replace the adapter with an approved data provider while preserving the Redis/dashboard interface.
