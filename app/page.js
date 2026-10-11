@@ -5,15 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 const fallback = {
   generatedAt: null,
   source: "fallback",
+  region: "Karnataka",
+  geo: "IN-KA",
   dailyHistory: [],
-  terms: [
-    { id: "gst-registration", label: "GST Registration", keyword: "gst registration", score: 0, delta: 0, estimatedDaily: null },
-    { id: "gst-registration-bangalore", label: "GST Registration Bangalore", keyword: "gst registration bangalore", score: 0, delta: 0, estimatedDaily: null },
-    { id: "company-registration", label: "Company Registration", keyword: "company registration", score: 0, delta: 0, estimatedDaily: null },
-    { id: "company-registration-bangalore", label: "Company Registration Bangalore", keyword: "company registration bangalore", score: 0, delta: 0, estimatedDaily: null },
-    { id: "private-limited-company-registration", label: "Private Limited Company Registration", keyword: "private limited company registration", score: 0, delta: 0, estimatedDaily: null },
-    { id: "llp-registration-bangalore", label: "LLP Registration Bangalore", keyword: "llp registration bangalore", score: 0, delta: 0, estimatedDaily: null }
-  ]
+  terms: []
 };
 
 function formatNumber(value) {
@@ -72,15 +67,15 @@ export default function Home() {
             <div className="brand-location">bangalore India</div>
             <div className="brand-credit">Made for Ashwat CA from Ashish Janghel</div>
             <div className="eyebrow">24/7 Search Intent Monitor</div>
-            <h1>GST + Company Registration</h1>
+            <h1>Karnataka Search Intent</h1>
             <p className="subtitle">
-              India-wide aggregated Google search-interest monitoring. The collector refreshes automatically and keeps the latest persisted sample.
+              Karnataka-only aggregated Google search-interest monitoring across the configured business-service keywords.
             </p>
           </div>
 
           <div className="status">
-            <div className="status-label">Collector</div>
-            <div className="status-value"><span className="dot" /> Live polling</div>
+            <div className="status-label">Region</div>
+            <div className="status-value"><span className="dot" /> Karnataka only</div>
             <div className="status-label" style={{ marginTop: 10 }}>
               Last sample: {formatDate(data.generatedAt)}
             </div>
@@ -146,7 +141,7 @@ export default function Home() {
                 <div className="kicker">Daily keyword history</div>
                 <h2>Day-by-day search-interest index</h2>
                 <p>
-                  Each value is the average Google Trends index collected throughout that India day. It is a relative 0–100 signal, not the number of individual people or searches.
+                  Each value is the average Google Trends index collected throughout that Karnataka day. It is a relative 0–100 signal, not the number of individual people or searches.
                 </p>
               </div>
               <div className="history-meta">
@@ -160,29 +155,19 @@ export default function Home() {
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>GST Registration</th>
-                      <th>GST Reg. Bangalore</th>
-                      <th>Company Registration</th>
-                      <th>Company Reg. Bangalore</th>
-                      <th>Private Limited</th>
-                      <th>LLP Bangalore</th>
+                      {(data.terms || []).map((term) => (
+                        <th key={term.id}>{term.label}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.dailyHistory.map((day) => (
                       <tr key={day.date}>
                         <td className="history-date">{day.date}</td>
-                        {[
-                          "gst-registration",
-                          "gst-registration-bangalore",
-                          "company-registration",
-                          "company-registration-bangalore",
-                          "private-limited-company-registration",
-                          "llp-registration-bangalore"
-                        ].map((id) => (
-                          <td key={id}>
+                        {(data.terms || []).map((term) => (
+                          <td key={term.id}>
                             <span className="history-value">
-                              {day.terms?.[id]?.average ?? "—"}
+                              {day.terms?.[term.id]?.average ?? "—"}
                             </span>
                           </td>
                         ))}
