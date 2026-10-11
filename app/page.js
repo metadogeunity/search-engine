@@ -186,7 +186,7 @@ export default function Home() {
 
         <footer className="footer">
           <div>
-            Source: Google Trends interest-over-time signal for India. Collector cadence: approximately 1 minute; daily summaries are retained for up to 365 days.
+            Source: Google Trends interest-over-time signal restricted to Karnataka (IN-KA). Collector cadence: approximately 1 minute; daily summaries are retained for up to 365 days.
           </div>
           <div>
             {loading ? "Loading…" : error ? <span className="error">{error}</span> : "Ready"}
