@@ -50,8 +50,7 @@ export default function Home() {
   }, []);
 
   const totalActivity = useMemo(() => {
-    if (!data.terms?.length) return 0;
-    return Math.round(data.terms.reduce((sum, term) => sum + (term.score || 0), 0) / data.terms.length);
+    return Number(data.cumulativeInterest || 0);
   }, [data]);
 
   const rising = useMemo(() => {
@@ -84,16 +83,16 @@ export default function Home() {
 
         <section className="grid">
           <div className="card hero">
-            <div className="kicker">Current aggregate activity</div>
-            <div className="big-number">{totalActivity}/100</div>
-            <div className="big-label">Relative search-interest index across monitored terms</div>
+            <div className="kicker">Cumulative activity</div>
+            <div className="big-number">{formatNumber(totalActivity)}</div>
+            <div className="big-label">Total accumulated search-interest points across all monitored keywords</div>
             {rising ? (
               <div className={"delta " + (rising.delta > 2 ? "up" : rising.delta < -2 ? "down" : "flat")}>
                 {rising.delta > 0 ? "↑" : rising.delta < 0 ? "↓" : "→"} {Math.abs(rising.delta)}% vs previous sample — {rising.label}
               </div>
             ) : null}
             <div className="notice">
-              Google Trends is anonymised and aggregated. This dashboard does not identify individual searchers and does not provide an exact number of people searching in real time.
+              Google Trends is anonymised and aggregated. The total shown here is a cumulative index-point measure, not an exact number of people or searches.
             </div>
           </div>
 
@@ -110,9 +109,9 @@ export default function Home() {
           <div className="card table-card">
             <div className="table-head">
               <div>Keyword</div>
-              <div>Interest</div>
+              <div>Total count</div>
               <div>Momentum</div>
-              <div>Optional estimate</div>
+              <div>Current signal</div>
             </div>
 
             {(data.terms || []).map((term) => (
@@ -125,20 +124,25 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div><span className="badge">{Math.round(term.score || 0)}/100</span></div>
+                <div>
+                  <div className="total-count">{formatNumber(term.cumulativeInterest || 0)}</div>
+                  <div className="count-label">accumulated points</div>
+                </div>
 
                 <div className={(term.delta || 0) > 2 ? "delta up" : (term.delta || 0) < -2 ? "delta down" : "delta flat"}>
                   {(term.delta || 0) > 0 ? "↑" : (term.delta || 0) < 0 ? "↓" : "→"} {Math.abs(Math.round(term.delta || 0))}%
                 </div>
 
-                <div>{term.estimatedDaily ? formatNumber(term.estimatedDaily) + "/day*" : "Configure baseline"}</div>
+                <div>
+                  <span className="badge">{Math.round(term.score || 0)}/100</span>
+                </div>
               </div>
             ))}
           </div>
           <div className="card history-card">
             <div className="history-header">
               <div>
-                <div className="kicker">Daily keyword history</div>
+                <div className="kicker">Daily keyword history · cumulative totals retained</div>
                 <h2>Day-by-day search-interest index</h2>
                 <p>
                   Each value is the average Google Trends index collected throughout that Karnataka day. It is a relative 0–100 signal, not the number of individual people or searches.
