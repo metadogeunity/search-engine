@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 const fallback = {
   generatedAt: null,
   source: "fallback",
+  dailyHistory: [],
   terms: [
     { id: "gst-registration", label: "GST Registration", keyword: "gst registration", score: 0, delta: 0, estimatedDaily: null },
     { id: "gst-registration-bangalore", label: "GST Registration Bangalore", keyword: "gst registration bangalore", score: 0, delta: 0, estimatedDaily: null },
@@ -36,7 +37,7 @@ export default function Home() {
   async function refresh() {
     try {
       setError("");
-      const res = await fetch("/api/monitor", { cache: "no-store" });
+      const res = await fetch("/api/monitor?days=30", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Unable to load monitor");
       setData(json);
@@ -139,11 +140,68 @@ export default function Home() {
               </div>
             ))}
           </div>
+          <div className="card history-card">
+            <div className="history-header">
+              <div>
+                <div className="kicker">Daily keyword history</div>
+                <h2>Day-by-day search-interest index</h2>
+                <p>
+                  Each value is the average Google Trends index collected throughout that India day. It is a relative 0–100 signal, not the number of individual people or searches.
+                </p>
+              </div>
+              <div className="history-meta">
+                {data.dailyHistory?.length || 0} days recorded
+              </div>
+            </div>
+
+            {data.dailyHistory?.length ? (
+              <div className="history-scroll">
+                <table className="history-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>GST Registration</th>
+                      <th>GST Reg. Bangalore</th>
+                      <th>Company Registration</th>
+                      <th>Company Reg. Bangalore</th>
+                      <th>Private Limited</th>
+                      <th>LLP Bangalore</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.dailyHistory.map((day) => (
+                      <tr key={day.date}>
+                        <td className="history-date">{day.date}</td>
+                        {[
+                          "gst-registration",
+                          "gst-registration-bangalore",
+                          "company-registration",
+                          "company-registration-bangalore",
+                          "private-limited-company-registration",
+                          "llp-registration-bangalore"
+                        ].map((id) => (
+                          <td key={id}>
+                            <span className="history-value">
+                              {day.terms?.[id]?.average ?? "—"}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="history-empty">
+                Daily history will appear after the collector records its first samples.
+              </div>
+            )}
+          </div>
         </section>
 
         <footer className="footer">
           <div>
-            Source: Google Trends interest-over-time signal for India. Collector cadence: approximately 1 minute; browser refresh: 60 seconds.
+            Source: Google Trends interest-over-time signal for India. Collector cadence: approximately 1 minute; daily summaries are retained for up to 365 days.
           </div>
           <div>
             {loading ? "Loading…" : error ? <span className="error">{error}</span> : "Ready"}
