@@ -13,6 +13,8 @@ const LATEST_KEY = "search-intent-monitor:latest";
 const HISTORY_KEY = "search-intent-monitor:history";
 const DAILY_PREFIX = "search-intent-monitor:daily:";
 const DAILY_MIGRATION_KEY = "search-intent-monitor:daily-migration-v1";
+const CUMULATIVE_KEY = "search-intent-monitor:cumulative";
+const CUMULATIVE_MIGRATION_KEY = "search-intent-monitor:cumulative-migration-v1";
 const DAILY_TTL_SECONDS = 60 * 60 * 24 * 365;
 
 function sleep(ms) {
@@ -156,6 +158,45 @@ async function migrateExistingHistory(redis) {
   console.log("Daily history migration completed");
 }
 
+async function migrateCumulativeTotals(redis) {
+  if (await redis.get(CUMULATIVE_MIGRATION_KEY)) return;
+
+  for (let offset = 0; offset < 365; offset += 1) {
+    const date = new Date(Date.now() + 330 * 60 * 1000 - offset * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    const bucket = await redis.get(DAILY_PREFIX + date);
+    if (!bucket?.terms) continue;
+
+    const increments = Object.entries(bucket.terms)
+      .map(([termId, data]) => [termId, Math.round(Number(data?.sum) || 0)])
+      .filter(([, amount]) => amount > 0);
+
+    if (increments.length) {
+      await Promise.all(
+        increments.map(([termId, amount]) => redis.hincrby(CUMULATIVE_KEY, termId, amount))
+      );
+    }
+  }
+
+  await redis.set(CUMULATIVE_MIGRATION_KEY, new Date().toISOString());
+  console.log("Cumulative totals migration completed");
+}
+
+async function incrementCumulativeTotals(redis, snapshot) {
+  const increments = (snapshot.terms || [])
+    .filter((term) => Number(term.sampledPoints || 0) > 0 && !term.error)
+    .map((term) => [term.id, Math.round(Number(term.score) || 0)])
+    .filter(([, amount]) => amount > 0);
+
+  if (!increments.length) return;
+
+  await Promise.all(
+    increments.map(([termId, amount]) => redis.hincrby(CUMULATIVE_KEY, termId, amount))
+  );
+}
+
 async function collectTerm(term) {
   const endTime = new Date();
   const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
@@ -227,6 +268,7 @@ async function collectSnapshot(redis) {
   await redis.lpush(HISTORY_KEY, JSON.stringify(snapshot));
   await redis.ltrim(HISTORY_KEY, 0, 2879);
   await persistDailySnapshot(redis, snapshot);
+  await incrementCumulativeTotals(redis, snapshot);
 
   console.log("Snapshot saved at", snapshot.generatedAt);
 }
@@ -242,6 +284,7 @@ async function main() {
   const redis = Redis.fromEnv();
 
   await migrateExistingHistory(redis);
+  await migrateCumulativeTotals(redis);
 
   for (let i = 0; i < loops; i += 1) {
     const iterationStarted = Date.now();
