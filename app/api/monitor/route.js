@@ -15,6 +15,31 @@ function emptyTerms() {
   }));
 }
 
+function normalizeStoredSnapshot(stored) {
+  const storedById = new Map(
+    Array.isArray(stored?.terms)
+      ? stored.terms.map((term) => [term.id, term])
+      : []
+  );
+
+  return {
+    ...stored,
+    region: "Karnataka",
+    geo: "IN-KA",
+    terms: TERMS.map((term) => {
+      const previous = storedById.get(term.id);
+      return {
+        ...term,
+        score: Number(previous?.score) || 0,
+        delta: Number(previous?.delta) || 0,
+        sampledPoints: Number(previous?.sampledPoints) || 0,
+        estimatedDaily: previous?.estimatedDaily ?? null,
+        ...(previous?.error ? { error: previous.error } : {})
+      };
+    })
+  };
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const requestedDays = Number(searchParams.get("days") || "30");
@@ -49,7 +74,7 @@ export async function GET(request) {
   }
 
   return NextResponse.json({
-    ...stored,
+    ...normalizeStoredSnapshot(stored),
     dailyHistory,
     historyAvailable,
     lastPersistedAt: stored.generatedAt
