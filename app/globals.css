@@ -188,6 +188,18 @@ h1 {
 .table-row:last-child { border-bottom: 0; }
 .keyword { font-weight: 700; }
 
+.total-count {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.count-label {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
