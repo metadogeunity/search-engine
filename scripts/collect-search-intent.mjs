@@ -201,15 +201,18 @@ async function collectSnapshot(redis) {
         console.log("Collected:", term.keyword);
         return result;
       } catch (error) {
+        console.error("Failed:", term.keyword, error);
         return {
-        ...term,
-        score: 0,
-        delta: 0,
-        sampledPoints: 0,
-        error: error instanceof Error ? error.message : "Trend provider error"
-      });
-      console.error("Failed:", term.keyword, error);
-    }
+          ...term,
+          score: 0,
+          delta: 0,
+          sampledPoints: 0,
+          error: error instanceof Error ? error.message : "Trend provider error"
+        };
+      }
+    }));
+    
+    results.push(...batchResults);
   }
 
   const snapshot = {
