@@ -59,6 +59,33 @@ body {
   margin-bottom: 28px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.region-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 0 16px;
+  border: 1px solid rgba(98,176,255,.25);
+  background: rgba(98,176,255,.08);
+  color: #c5e2ff;
+  border-radius: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background .2s ease, border-color .2s ease, transform .2s ease;
+}
+
+.region-switch:hover {
+  background: rgba(98,176,255,.14);
+  border-color: rgba(98,176,255,.42);
+  transform: translateY(-1px);
+}
+
 .eyebrow {
   color: var(--accent);
   font-size: 12px;
@@ -263,6 +290,19 @@ h1 {
     align-items: stretch;
     flex-direction: column;
     margin-bottom: 18px;
+  }
+
+  .header-actions {
+    width: 100%;
+  }
+
+  .region-switch {
+    min-height: 48px;
+    flex: 0 0 auto;
+  }
+
+  .header-actions .status {
+    flex: 1;
   }
 
   .brand-name {
