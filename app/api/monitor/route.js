@@ -1,21 +1,34 @@
 import { NextResponse } from "next/server";
-import { getLatestSnapshot } from "@/lib/store";
+import { getDailyHistory, getLatestSnapshot } from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const stored = await getLatestSnapshot();
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const requestedDays = Number(searchParams.get("days") || "30");
+  const days = Math.min(
+    Math.max(Number.isFinite(requestedDays) ? requestedDays : 30, 1),
+    365
+  );
+
+  const [stored, dailyHistory] = await Promise.all([
+    getLatestSnapshot(),
+    getDailyHistory(days)
+  ]);
+
+  const historyAvailable = Boolean(
+    process.env.UPSTASH_REDIS_REST_URL &&
+    process.env.UPSTASH_REDIS_REST_TOKEN
+  );
 
   if (!stored) {
     return NextResponse.json({
       generatedAt: null,
       source: "waiting-for-collector",
       terms: [],
-      historyAvailable: Boolean(
-        process.env.UPSTASH_REDIS_REST_URL &&
-        process.env.UPSTASH_REDIS_REST_TOKEN
-      ),
+      dailyHistory,
+      historyAvailable,
       message: "Waiting for the first scheduled collection."
     }, {
       headers: { "Cache-Control": "no-store" }
@@ -24,10 +37,8 @@ export async function GET() {
 
   return NextResponse.json({
     ...stored,
-    historyAvailable: Boolean(
-      process.env.UPSTASH_REDIS_REST_URL &&
-      process.env.UPSTASH_REDIS_REST_TOKEN
-    ),
+    dailyHistory,
+    historyAvailable,
     lastPersistedAt: stored.generatedAt
   }, {
     headers: { "Cache-Control": "no-store" }
