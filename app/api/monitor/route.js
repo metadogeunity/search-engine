@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { getDailyHistory, getLatestSnapshot } from "@/lib/store";
+import { TERMS } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function emptyTerms() {
+  return TERMS.map((term) => ({
+    ...term,
+    score: 0,
+    delta: 0,
+    sampledPoints: 0,
+    estimatedDaily: null
+  }));
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -26,7 +37,9 @@ export async function GET(request) {
     return NextResponse.json({
       generatedAt: null,
       source: "waiting-for-collector",
-      terms: [],
+      region: "Karnataka",
+      geo: "IN-KA",
+      terms: emptyTerms(),
       dailyHistory,
       historyAvailable,
       message: "Waiting for the first scheduled collection."
