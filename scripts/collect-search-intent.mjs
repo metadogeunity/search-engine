@@ -1,20 +1,15 @@
 import trends from "google-trends-api";
 import { Redis } from "@upstash/redis";
 import { TERMS } from "../lib/config.js";
+import { REGIONS } from "../lib/regions.js";
 
 const terms = TERMS;
-const GEO = "IN-KA";
+const REGION_LIST = Object.values(REGIONS);
 const CONCURRENCY = Math.max(1, Number(process.env.COLLECT_CONCURRENCY || "5"));
 
 const loops = Math.max(1, Number(process.env.COLLECT_LOOPS || "1"));
 const intervalSeconds = Math.max(60, Number(process.env.COLLECT_INTERVAL_SECONDS || "60"));
 
-const LATEST_KEY = "search-intent-monitor:latest";
-const HISTORY_KEY = "search-intent-monitor:history";
-const DAILY_PREFIX = "search-intent-monitor:daily:";
-const DAILY_MIGRATION_KEY = "search-intent-monitor:daily-migration-v1";
-const CUMULATIVE_KEY = "search-intent-monitor:cumulative";
-const CUMULATIVE_MIGRATION_KEY = "search-intent-monitor:cumulative-migration-v1";
 const DAILY_TTL_SECONDS = 60 * 60 * 24 * 365;
 
 function sleep(ms) {
@@ -57,9 +52,7 @@ function mergeSnapshotIntoBucket(bucket, snapshot) {
       !Number.isFinite(Number(term.score)) ||
       Number(term.sampledPoints || 0) <= 0 ||
       term.error
-    ) {
-      continue;
-    }
+    ) continue;
 
     const score = Number(term.score) || 0;
     const previous = bucket.terms[term.id] || {
@@ -90,9 +83,9 @@ function latestDate(a, b) {
   return new Date(a) >= new Date(b) ? a : b;
 }
 
-async function persistDailySnapshot(redis, snapshot) {
+async function persistDailySnapshot(redis, snapshot, region) {
   const date = indiaDateKey(new Date(snapshot.generatedAt || Date.now()));
-  const key = DAILY_PREFIX + date;
+  const key = region.keys.dailyPrefix + date;
   const existing = await redis.get(key);
   const bucket = existing && typeof existing === "object"
     ? existing
@@ -102,10 +95,10 @@ async function persistDailySnapshot(redis, snapshot) {
   await redis.set(key, bucket, { ex: DAILY_TTL_SECONDS });
 }
 
-async function migrateExistingHistory(redis) {
-  if (await redis.get(DAILY_MIGRATION_KEY)) return;
+async function migrateExistingHistory(redis, region) {
+  if (await redis.get(region.keys.dailyMigration)) return;
 
-  const rawHistory = await redis.lrange(HISTORY_KEY, 0, 287);
+  const rawHistory = await redis.lrange(region.keys.history, 0, 287);
   const buckets = new Map();
 
   for (const item of rawHistory) {
@@ -122,12 +115,11 @@ async function migrateExistingHistory(redis) {
   }
 
   for (const [date, incoming] of buckets) {
-    const key = DAILY_PREFIX + date;
+    const key = region.keys.dailyPrefix + date;
     const existing = await redis.get(key);
 
     if (existing && typeof existing === "object") {
       const merged = existing;
-
       merged.sampleCount = Number(merged.sampleCount || 0) + Number(incoming.sampleCount || 0);
       merged.lastUpdatedAt = latestDate(merged.lastUpdatedAt, incoming.lastUpdatedAt);
 
@@ -154,19 +146,19 @@ async function migrateExistingHistory(redis) {
     }
   }
 
-  await redis.set(DAILY_MIGRATION_KEY, new Date().toISOString(), { ex: DAILY_TTL_SECONDS });
-  console.log("Daily history migration completed");
+  await redis.set(region.keys.dailyMigration, new Date().toISOString());
+  console.log("Daily history migration completed for", region.label);
 }
 
-async function migrateCumulativeTotals(redis) {
-  if (await redis.get(CUMULATIVE_MIGRATION_KEY)) return;
+async function migrateCumulativeTotals(redis, region) {
+  if (await redis.get(region.keys.cumulativeMigration)) return;
 
   for (let offset = 0; offset < 365; offset += 1) {
     const date = new Date(Date.now() + 330 * 60 * 1000 - offset * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
 
-    const bucket = await redis.get(DAILY_PREFIX + date);
+    const bucket = await redis.get(region.keys.dailyPrefix + date);
     if (!bucket?.terms) continue;
 
     const increments = Object.entries(bucket.terms)
@@ -175,16 +167,16 @@ async function migrateCumulativeTotals(redis) {
 
     if (increments.length) {
       await Promise.all(
-        increments.map(([termId, amount]) => redis.hincrby(CUMULATIVE_KEY, termId, amount))
+        increments.map(([termId, amount]) => redis.hincrby(region.keys.cumulative, termId, amount))
       );
     }
   }
 
-  await redis.set(CUMULATIVE_MIGRATION_KEY, new Date().toISOString());
-  console.log("Cumulative totals migration completed");
+  await redis.set(region.keys.cumulativeMigration, new Date().toISOString());
+  console.log("Cumulative totals migration completed for", region.label);
 }
 
-async function incrementCumulativeTotals(redis, snapshot) {
+async function incrementCumulativeTotals(redis, snapshot, region) {
   const increments = (snapshot.terms || [])
     .filter((term) => Number(term.sampledPoints || 0) > 0 && !term.error)
     .map((term) => [term.id, Math.round(Number(term.score) || 0)])
@@ -193,11 +185,11 @@ async function incrementCumulativeTotals(redis, snapshot) {
   if (!increments.length) return;
 
   await Promise.all(
-    increments.map(([termId, amount]) => redis.hincrby(CUMULATIVE_KEY, termId, amount))
+    increments.map(([termId, amount]) => redis.hincrby(region.keys.cumulative, termId, amount))
   );
 }
 
-async function collectTerm(term) {
+async function collectTerm(term, region) {
   const endTime = new Date();
   const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
 
@@ -205,7 +197,7 @@ async function collectTerm(term) {
     keyword: term.keyword,
     startTime,
     endTime,
-    geo: GEO,
+    geo: region.geo,
     hl: "en-IN",
     timezone: -330,
     granularTimeResolution: true
@@ -225,26 +217,31 @@ async function collectTerm(term) {
 
   return {
     ...term,
+    region: region.label,
+    geo: region.geo,
     score: Math.round(score),
     delta,
     sampledPoints: points.length
   };
 }
 
-async function collectSnapshot(redis) {
+async function collectSnapshot(redis, region) {
   const results = [];
 
   for (let index = 0; index < terms.length; index += CONCURRENCY) {
     const batch = terms.slice(index, index + CONCURRENCY);
+
     const batchResults = await Promise.all(batch.map(async (term) => {
       try {
-        const result = await collectTerm(term);
-        console.log("Collected:", term.keyword);
+        const result = await collectTerm(term, region);
+        console.log("Collected:", region.label, term.keyword);
         return result;
       } catch (error) {
-        console.error("Failed:", term.keyword, error);
+        console.error("Failed:", region.label, term.keyword, error);
         return {
           ...term,
+          region: region.label,
+          geo: region.geo,
           score: 0,
           delta: 0,
           sampledPoints: 0,
@@ -252,25 +249,25 @@ async function collectSnapshot(redis) {
         };
       }
     }));
-    
+
     results.push(...batchResults);
   }
 
   const snapshot = {
     generatedAt: new Date().toISOString(),
     source: "google-trends",
-    region: "Karnataka",
-    geo: GEO,
+    region: region.label,
+    geo: region.geo,
     terms: results
   };
 
-  await redis.set(LATEST_KEY, snapshot);
-  await redis.lpush(HISTORY_KEY, JSON.stringify(snapshot));
-  await redis.ltrim(HISTORY_KEY, 0, 2879);
-  await persistDailySnapshot(redis, snapshot);
-  await incrementCumulativeTotals(redis, snapshot);
+  await redis.set(region.keys.latest, snapshot);
+  await redis.lpush(region.keys.history, JSON.stringify(snapshot));
+  await redis.ltrim(region.keys.history, 0, 2879);
+  await persistDailySnapshot(redis, snapshot, region);
+  await incrementCumulativeTotals(redis, snapshot, region);
 
-  console.log("Snapshot saved at", snapshot.generatedAt);
+  console.log("Snapshot saved at", snapshot.generatedAt, "for", region.label);
 }
 
 async function main() {
@@ -283,14 +280,15 @@ async function main() {
 
   const redis = Redis.fromEnv();
 
-  await migrateExistingHistory(redis);
-  await migrateCumulativeTotals(redis);
+  const karnataka = REGIONS.karnataka;
+  await migrateExistingHistory(redis, karnataka);
+  await migrateCumulativeTotals(redis, karnataka);
 
   for (let i = 0; i < loops; i += 1) {
     const iterationStarted = Date.now();
     console.log("Collection", i + 1, "of", loops);
 
-    await collectSnapshot(redis);
+    await Promise.all(REGION_LIST.map((region) => collectSnapshot(redis, region)));
 
     if (i < loops - 1) {
       const elapsed = Date.now() - iterationStarted;
