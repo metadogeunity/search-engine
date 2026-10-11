@@ -1,21 +1,22 @@
 import { NextResponse } from "next/server";
-import { getDailyHistory, getLatestSnapshot } from "@/lib/store";
+import { getCumulativeTotals, getDailyHistory, getLatestSnapshot } from "@/lib/store";
 import { TERMS } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function emptyTerms() {
+function emptyTerms(cumulativeTotals = {}) {
   return TERMS.map((term) => ({
     ...term,
     score: 0,
     delta: 0,
     sampledPoints: 0,
-    estimatedDaily: null
+    estimatedDaily: null,
+    cumulativeInterest: Number(cumulativeTotals[term.id]) || 0
   }));
 }
 
-function normalizeStoredSnapshot(stored) {
+function normalizeStoredSnapshot(stored, cumulativeTotals = {}) {
   const storedById = new Map(
     Array.isArray(stored?.terms)
       ? stored.terms.map((term) => [term.id, term])
@@ -34,6 +35,7 @@ function normalizeStoredSnapshot(stored) {
         delta: Number(previous?.delta) || 0,
         sampledPoints: Number(previous?.sampledPoints) || 0,
         estimatedDaily: previous?.estimatedDaily ?? null,
+        cumulativeInterest: Number(cumulativeTotals[term.id]) || 0,
         ...(previous?.error ? { error: previous.error } : {})
       };
     })
@@ -48,10 +50,16 @@ export async function GET(request) {
     365
   );
 
-  const [stored, dailyHistory] = await Promise.all([
+  const [stored, dailyHistory, cumulativeTotals] = await Promise.all([
     getLatestSnapshot(),
-    getDailyHistory(days)
+    getDailyHistory(days),
+    getCumulativeTotals()
   ]);
+
+  const totalCumulativeInterest = TERMS.reduce(
+    (sum, term) => sum + (Number(cumulativeTotals[term.id]) || 0),
+    0
+  );
 
   const historyAvailable = Boolean(
     process.env.UPSTASH_REDIS_REST_URL &&
@@ -64,7 +72,8 @@ export async function GET(request) {
       source: "waiting-for-collector",
       region: "Karnataka",
       geo: "IN-KA",
-      terms: emptyTerms(),
+      terms: emptyTerms(cumulativeTotals),
+      cumulativeInterest: totalCumulativeInterest,
       dailyHistory,
       historyAvailable,
       message: "Waiting for the first scheduled collection."
@@ -74,7 +83,8 @@ export async function GET(request) {
   }
 
   return NextResponse.json({
-    ...normalizeStoredSnapshot(stored),
+    ...normalizeStoredSnapshot(stored, cumulativeTotals),
+    cumulativeInterest: totalCumulativeInterest,
     dailyHistory,
     historyAvailable,
     lastPersistedAt: stored.generatedAt
