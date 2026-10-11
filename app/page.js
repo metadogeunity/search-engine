@@ -7,6 +7,7 @@ const fallback = {
   source: "fallback",
   region: "Karnataka",
   geo: "IN-KA",
+  cumulativeInterest: 0,
   dailyHistory: [],
   terms: []
 };
@@ -26,36 +27,51 @@ function formatDate(value) {
 
 export default function Home() {
   const [data, setData] = useState(fallback);
+  const [regionId, setRegionId] = useState("karnataka");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function refresh() {
-    try {
-      setError("");
-      const res = await fetch("/api/monitor?days=30", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Unable to load monitor");
-      setData(json);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, 60_000);
-    return () => clearInterval(timer);
+    const params = new URLSearchParams(window.location.search);
+    setRegionId(params.get("region") === "india" ? "india" : "karnataka");
   }, []);
 
-  const totalActivity = useMemo(() => {
-    return Number(data.cumulativeInterest || 0);
-  }, [data]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refresh() {
+      try {
+        setError("");
+        setLoading(true);
+        const query = regionId === "india" ? "&region=india" : "";
+        const res = await fetch("/api/monitor?days=30" + query, { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Unable to load monitor");
+        if (!cancelled) setData(json);
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    refresh();
+    const timer = setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [regionId]);
+
+  const totalActivity = useMemo(() => Number(data.cumulativeInterest || 0), [data]);
 
   const rising = useMemo(() => {
     return [...(data.terms || [])].sort((a, b) => (b.delta || 0) - (a.delta || 0))[0];
   }, [data]);
+
+  const isIndia = regionId === "india";
+  const otherRegionHref = isIndia ? "/" : "/?region=india";
+  const otherRegionLabel = isIndia ? "Karnataka" : "India";
 
   return (
     <main className="page">
@@ -66,24 +82,33 @@ export default function Home() {
             <div className="brand-location">bangalore India</div>
             <div className="brand-credit">Made for Ashwat CA from Ashish Janghel</div>
             <div className="eyebrow">24/7 Search Intent Monitor</div>
-            <h1>Karnataka Search Intent</h1>
+            <h1>{data.region || (isIndia ? "India" : "Karnataka")} Search Intent</h1>
             <p className="subtitle">
-              Karnataka-only aggregated Google search-interest monitoring across the configured business-service keywords.
+              {data.region || (isIndia ? "India" : "Karnataka")}-wide aggregated Google search-interest monitoring across the configured business-service keywords.
             </p>
           </div>
 
-          <div className="status">
-            <div className="status-label">Region</div>
-            <div className="status-value"><span className="dot" /> Karnataka only</div>
-            <div className="status-label" style={{ marginTop: 10 }}>
-              Last sample: {formatDate(data.generatedAt)}
+          <div className="header-actions">
+            <a
+              className="region-switch"
+              href={otherRegionHref}
+              aria-label={`Switch to ${otherRegionLabel} view`}
+            >
+              {otherRegionLabel}
+            </a>
+            <div className="status">
+              <div className="status-label">Region</div>
+              <div className="status-value"><span className="dot" /> {data.region || (isIndia ? "India" : "Karnataka")} only</div>
+              <div className="status-label" style={{ marginTop: 10 }}>
+                Last sample: {formatDate(data.generatedAt)}
+              </div>
             </div>
           </div>
         </header>
 
         <section className="grid">
           <div className="card hero">
-            <div className="kicker">Cumulative activity</div>
+            <div className="kicker">Cumulative {data.region || (isIndia ? "India" : "Karnataka")} activity</div>
             <div className="big-number">{formatNumber(totalActivity)}</div>
             <div className="big-label">Total accumulated search-interest points across all monitored keywords</div>
             {rising ? (
@@ -101,7 +126,7 @@ export default function Home() {
             {(data.terms || []).slice(0, 4).map((term) => (
               <div className="stat-row" key={term.id}>
                 <div className="stat-name">{term.label}</div>
-                <div className="stat-value">{Math.round(term.score || 0)}</div>
+                <div className="stat-value">{formatNumber(term.cumulativeInterest || 0)}</div>
               </div>
             ))}
           </div>
@@ -139,13 +164,14 @@ export default function Home() {
               </div>
             ))}
           </div>
+
           <div className="card history-card">
             <div className="history-header">
               <div>
                 <div className="kicker">Daily keyword history · cumulative totals retained</div>
                 <h2>Day-by-day search-interest index</h2>
                 <p>
-                  Each value is the average Google Trends index collected throughout that Karnataka day. It is a relative 0–100 signal, not the number of individual people or searches.
+                  Each value is the average Google Trends index collected throughout that {data.region || "Karnataka"} day. It is a relative 0–100 signal, not the number of individual people or searches.
                 </p>
               </div>
               <div className="history-meta">
@@ -182,7 +208,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="history-empty">
-                Daily history will appear after the collector records its first samples.
+                Daily history will appear after the collector records its first samples for this region.
               </div>
             )}
           </div>
@@ -190,7 +216,7 @@ export default function Home() {
 
         <footer className="footer">
           <div>
-            Source: Google Trends interest-over-time signal restricted to Karnataka (IN-KA). Collector cadence: approximately 1 minute; daily summaries are retained for up to 365 days.
+            Source: Google Trends interest-over-time signal restricted to {data.region || (isIndia ? "India" : "Karnataka")}. Collector cadence: approximately 1 minute; daily summaries are retained for up to 365 days.
           </div>
           <div>
             {loading ? "Loading…" : error ? <span className="error">{error}</span> : "Ready"}
