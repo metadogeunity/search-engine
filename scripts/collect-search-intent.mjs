@@ -1,14 +1,10 @@
 import trends from "google-trends-api";
 import { Redis } from "@upstash/redis";
+import { TERMS } from "../lib/config.js";
 
-const terms = [
-  { id: "gst-registration", label: "GST Registration", keyword: "gst registration" },
-  { id: "gst-registration-bangalore", label: "GST Registration Bangalore", keyword: "gst registration bangalore" },
-  { id: "company-registration", label: "Company Registration", keyword: "company registration" },
-  { id: "company-registration-bangalore", label: "Company Registration Bangalore", keyword: "company registration bangalore" },
-  { id: "private-limited-company-registration", label: "Private Limited Company Registration", keyword: "private limited company registration" },
-  { id: "llp-registration-bangalore", label: "LLP Registration Bangalore", keyword: "llp registration bangalore" }
-];
+const terms = TERMS;
+const GEO = "IN-KA";
+const CONCURRENCY = Math.max(1, Number(process.env.COLLECT_CONCURRENCY || "5"));
 
 const loops = Math.max(1, Number(process.env.COLLECT_LOOPS || "1"));
 const intervalSeconds = Math.max(60, Number(process.env.COLLECT_INTERVAL_SECONDS || "60"));
@@ -168,7 +164,7 @@ async function collectTerm(term) {
     keyword: term.keyword,
     startTime,
     endTime,
-    geo: "IN",
+    geo: GEO,
     hl: "en-IN",
     timezone: -330,
     granularTimeResolution: true
@@ -197,12 +193,15 @@ async function collectTerm(term) {
 async function collectSnapshot(redis) {
   const results = [];
 
-  for (const term of terms) {
-    try {
-      results.push(await collectTerm(term));
-      console.log("Collected:", term.keyword);
-    } catch (error) {
-      results.push({
+  for (let index = 0; index < terms.length; index += CONCURRENCY) {
+    const batch = terms.slice(index, index + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(async (term) => {
+      try {
+        const result = await collectTerm(term);
+        console.log("Collected:", term.keyword);
+        return result;
+      } catch (error) {
+        return {
         ...term,
         score: 0,
         delta: 0,
@@ -216,6 +215,8 @@ async function collectSnapshot(redis) {
   const snapshot = {
     generatedAt: new Date().toISOString(),
     source: "google-trends",
+    region: "Karnataka",
+    geo: GEO,
     terms: results
   };
 
