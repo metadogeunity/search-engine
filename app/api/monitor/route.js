@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCumulativeTotals, getDailyHistory, getLatestSnapshot } from "@/lib/store";
 import { TERMS } from "@/lib/config";
+import { getRegion } from "@/lib/regions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function emptyTerms(cumulativeTotals = {}) {
+function emptyTerms(region, cumulativeTotals = {}) {
   return TERMS.map((term) => ({
     ...term,
+    region: region.label,
+    geo: region.geo,
     score: 0,
     delta: 0,
     sampledPoints: 0,
@@ -16,7 +19,7 @@ function emptyTerms(cumulativeTotals = {}) {
   }));
 }
 
-function normalizeStoredSnapshot(stored, cumulativeTotals = {}) {
+function normalizeStoredSnapshot(stored, region, cumulativeTotals = {}) {
   const storedById = new Map(
     Array.isArray(stored?.terms)
       ? stored.terms.map((term) => [term.id, term])
@@ -25,12 +28,14 @@ function normalizeStoredSnapshot(stored, cumulativeTotals = {}) {
 
   return {
     ...stored,
-    region: "Karnataka",
-    geo: "IN-KA",
+    region: region.label,
+    geo: region.geo,
     terms: TERMS.map((term) => {
       const previous = storedById.get(term.id);
       return {
         ...term,
+        region: region.label,
+        geo: region.geo,
         score: Number(previous?.score) || 0,
         delta: Number(previous?.delta) || 0,
         sampledPoints: Number(previous?.sampledPoints) || 0,
@@ -50,10 +55,12 @@ export async function GET(request) {
     365
   );
 
+  const region = getRegion(searchParams.get("region") || "karnataka");
+
   const [stored, dailyHistory, cumulativeTotals] = await Promise.all([
-    getLatestSnapshot(),
-    getDailyHistory(days),
-    getCumulativeTotals()
+    getLatestSnapshot(region.id),
+    getDailyHistory(days, region.id),
+    getCumulativeTotals(region.id)
   ]);
 
   const totalCumulativeInterest = TERMS.reduce(
@@ -70,20 +77,20 @@ export async function GET(request) {
     return NextResponse.json({
       generatedAt: null,
       source: "waiting-for-collector",
-      region: "Karnataka",
-      geo: "IN-KA",
-      terms: emptyTerms(cumulativeTotals),
+      region: region.label,
+      geo: region.geo,
+      terms: emptyTerms(region, cumulativeTotals),
       cumulativeInterest: totalCumulativeInterest,
       dailyHistory,
       historyAvailable,
-      message: "Waiting for the first scheduled collection."
+      message: "Waiting for the first scheduled collection for this region."
     }, {
       headers: { "Cache-Control": "no-store" }
     });
   }
 
   return NextResponse.json({
-    ...normalizeStoredSnapshot(stored, cumulativeTotals),
+    ...normalizeStoredSnapshot(stored, region, cumulativeTotals),
     cumulativeInterest: totalCumulativeInterest,
     dailyHistory,
     historyAvailable,
